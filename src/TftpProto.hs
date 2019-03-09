@@ -1,6 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module TftpProto (Request(..), RequestMode(..), decodePacket, encodePacket) where
+-- Protocol definitions for TFTP v2 (RFC 1350)
+-- https://tools.ietf.org/html/rfc1350
+
+module TftpProto (Request(..), RequestError(..), RequestMode(..),
+                  decodePacket, encodePacket) where
 
 import           Data.Binary
 import           Data.Binary.Get
@@ -11,6 +15,15 @@ import           Data.Text            (Text)
 import           Data.Text.Encoding   (decodeUtf8, encodeUtf8)
 import           Data.Word            (Word16)
 
+data RequestError = FileNotFound
+  | AccessViolation
+  | DiskFull
+  | IllegalOperation
+  | UnknownTransfer
+  | FileExists
+  | UnknownError !Word16
+  deriving (Eq, Show)
+
 data RequestMode = Binary | Ascii
   deriving (Eq, Show)
 
@@ -18,7 +31,7 @@ data Request = RRQ !Text !RequestMode
              | WRQ !Text !RequestMode
              | DTA !Word16 !B.ByteString
              | ACK !Word16
-             | ERR !Word16 !Text
+             | ERR !RequestError !Text
   deriving (Eq, Show)
 
 putZeroTermString :: Text -> Put
@@ -26,6 +39,26 @@ putZeroTermString t = putByteString (encodeUtf8 t) >> putWord8 0
 
 getZeroTermString :: Get Text
 getZeroTermString = decodeUtf8 . BL.toStrict <$> getLazyByteStringNul
+
+instance Binary RequestError where
+  put FileNotFound     = putWord16be 1
+  put AccessViolation  = putWord16be 2
+  put DiskFull         = putWord16be 3
+  put IllegalOperation = putWord16be 4
+  put UnknownTransfer  = putWord16be 5
+  put FileExists       = putWord16be 6
+  put (UnknownError e) = putWord16be e
+
+  get = do
+    errorCode <- getWord16be
+    return (case errorCode of
+              1 -> FileNotFound
+              2 -> AccessViolation
+              3 -> DiskFull
+              4 -> IllegalOperation
+              5 -> UnknownTransfer
+              6 -> FileExists
+              e -> UnknownError e)
 
 instance Binary RequestMode where
   put Binary = putZeroTermString "octet"
@@ -60,7 +93,7 @@ instance Binary Request where
 
   put (ERR errCode errMsg) = do
     putWord16be 5
-    putWord16be errCode
+    put errCode
     putZeroTermString errMsg
 
   get = do
@@ -70,7 +103,7 @@ instance Binary Request where
       2 -> WRQ <$> getZeroTermString <*> get
       3 -> DTA <$> getWord16be <*> (BL.toStrict <$> getRemainingLazyByteString)
       4 -> ACK <$> getWord16be
-      5 -> ERR <$> getWord16be <*> getZeroTermString
+      5 -> ERR <$> get <*> getZeroTermString
       _ -> fail "Unknown opcode"
 
 decodePacket :: B.ByteString -> Maybe Request
