@@ -23,4 +23,5 @@ executable obiwan
                        bytestring,
                        text,
                        binary >= 0.8,
-                       containers
+                       containers,
+                       clock
