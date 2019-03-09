@@ -2,11 +2,12 @@
 
 module Main (main) where
 
-import           Control.Monad             (void)
-import           Data.ByteString           as B
+import           Control.Monad             (unless, void)
+import qualified Data.ByteString           as B
 import           Data.Functor              ((<&>))
 import           Data.List                 ((\\))
-import           Data.Map.Strict           as Map
+import qualified Data.Map.Strict           as Map
+import qualified Data.Set                  as Set
 import           Debug.Trace               (trace)
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
@@ -29,6 +30,7 @@ tftpBlockSize = 512
 
 data Connection = Pristine
                 | Reading B.ByteString
+  deriving (Eq, Show)
 
 type Client = S.SockAddr
 type TftpState = Map.Map Client Connection
@@ -52,12 +54,15 @@ initiateConnection c req = trace (show c ++ ": " ++ show req) (continueConnectio
 handleMessage :: TftpState -> Client -> Request -> (TftpState, Maybe Request)
 handleMessage s client req = maybe new continue (Map.lookup client s)
   where
-    continue con = maybe (delete client s, Nothing) store (continueConnection req con)
+    continue con = maybe (Map.delete client s, Nothing) store (continueConnection req con)
     new = maybe failed store (initiateConnection client req)
     failed = errorOut s IllegalOperation "Establishing connection failed"
     store (connection, resp) = (Map.insert client connection s, Just resp)
     errorOut ns errCode msg =
       trace (show client ++ ": " ++ show msg) (ns, Just (ERR errCode msg))
+
+removeClients :: TftpState -> [Client] -> TftpState
+removeClients s clients = Map.withoutKeys s (Set.fromList clients)
 
 -- Timeout Handling
 -- TODO Retransmissions
@@ -74,13 +79,19 @@ connectionTimeout = TimeSpec 10 0
 -- TODO This should be a priority queue
 type TimeoutState = [(Client, TimeSpec)]
 
-updateTimeout :: TimeoutState -> Client -> TimeSpec -> TimeoutState
-updateTimeout s client now = (client, now) : Prelude.filter isReplaced s
-  where isReplaced (c, _) = c == client
+emptyTimeoutState :: TimeoutState
+emptyTimeoutState = []
 
+-- Update the timeout for a specific client.
+updateTimeout :: TimeoutState -> Client -> TimeSpec -> TimeoutState
+updateTimeout s client now = (client, now) : filter isNotReplaced s
+  where isNotReplaced (c, _) = c /= client
+
+-- Find all clients that timed out, remove them from the timeout list and return
+-- them.
 processTimeouts :: TimeoutState -> TimeSpec -> ([Client], TimeoutState)
-processTimeouts s now = (Prelude.map fst oldEntries, s Data.List.\\ oldEntries)
-  where oldEntries = Prelude.filter isOld s
+processTimeouts s now = (map fst oldEntries, s Data.List.\\ oldEntries)
+  where oldEntries = filter isOld s
         isOld (_, time) = (now - time) > connectionTimeout
 
 -- Control Flow
@@ -88,9 +99,21 @@ processTimeouts s now = (Prelude.map fst oldEntries, s Data.List.\\ oldEntries)
 maybeDo :: Maybe a -> (a -> IO ()) -> IO ()
 maybeDo m f = maybe (return ()) f m
 
-loopForever :: TftpState -> (TftpState -> IO TftpState) -> IO ()
+loopForever :: a -> (a -> IO a) -> IO ()
 loopForever s f = void (loopForever_ s)
   where loopForever_ s_ = f s_ >>= (`loopForever` f)
+
+handlePacket :: S.Socket -> Client -> B.ByteString -> TftpState -> IO TftpState
+handlePacket sock client msg state =
+  case decodePacket msg <&> handleMessage state client of
+      Just (newTftpState, maybeReq) -> do
+        maybeDo maybeReq (\buf -> SB.sendAllTo sock (encodePacket buf) client)
+        return newTftpState
+      Nothing ->
+        return state
+
+handleTimeouts :: TimeoutState -> Client -> TimeSpec -> ([Client], TimeoutState)
+handleTimeouts s client now = processTimeouts (updateTimeout s client now) now
 
 main :: IO ()
 main = S.withSocketsDo $ do
@@ -99,13 +122,10 @@ main = S.withSocketsDo $ do
               (Just "127.0.0.1") (Just tftpServerPort)
   S.bind sock (S.addrAddress addrInfo)
 
-  loopForever emptyTftpState $ \state -> do
+  loopForever (emptyTftpState, emptyTimeoutState) $ \(state, timeouts) -> do
     (msg, client) <- SB.recvFrom sock 1500
-    now <- getTime timeoutClock
-    -- TODO Update timeouts
-    case decodePacket msg <&> handleMessage state client of
-      Just (newTftpState, maybeReq) -> do
-        maybeDo maybeReq (\buf -> SB.sendAllTo sock (encodePacket buf) client)
-        return newTftpState
-      Nothing ->
-        return state
+
+    (expiredClients, newTimeoutState) <- handleTimeouts timeouts client <$> getTime timeoutClock
+    newState <- handlePacket sock client msg $ removeClients state expiredClients
+
+    return (newState, newTimeoutState)
