@@ -1,4 +1,6 @@
-module TftpProto (Request(..), decodePacket, encodePacket) where
+{-# LANGUAGE OverloadedStrings #-}
+
+module TftpProto (Request(..), RequestMode(..), decodePacket, encodePacket) where
 
 import           Data.Binary
 import           Data.Binary.Get
@@ -9,12 +11,15 @@ import           Data.Text            (Text)
 import           Data.Text.Encoding   (decodeUtf8, encodeUtf8)
 import           Data.Word            (Word16)
 
-data Request = RRQ !Text !Text
-             | WRQ !Text !Text
+data RequestMode = Binary | Ascii
+  deriving (Eq, Show)
+
+data Request = RRQ !Text !RequestMode
+             | WRQ !Text !RequestMode
              | DTA !Word16 !B.ByteString
              | ACK !Word16
              | ERR !Word16 !Text
-  deriving (Show)
+  deriving (Eq, Show)
 
 putZeroTermString :: Text -> Put
 putZeroTermString t = putByteString (encodeUtf8 t) >> putWord8 0
@@ -22,16 +27,27 @@ putZeroTermString t = putByteString (encodeUtf8 t) >> putWord8 0
 getZeroTermString :: Get Text
 getZeroTermString = decodeUtf8 . BL.toStrict <$> getLazyByteStringNul
 
+instance Binary RequestMode where
+  put Binary = putZeroTermString "octet"
+  put Ascii  = putZeroTermString "netascii"
+
+  get =  do
+    modeStr <- getZeroTermString
+    case modeStr of
+      "netascii" -> return Ascii
+      "octet"    -> return Binary
+      _          -> fail "Unknown mode"
+
 instance Binary Request where
   put (RRQ filename mode) = do
     putWord16be 1
     putZeroTermString filename
-    putZeroTermString mode
+    put mode
 
   put (WRQ filename mode) = do
     putWord16be 2
     putZeroTermString filename
-    putZeroTermString mode
+    put mode
 
   put (DTA block fData) = do
     putWord16be 3
@@ -50,8 +66,8 @@ instance Binary Request where
   get = do
     opcode <- getWord16be
     case opcode of
-      1 -> RRQ <$> getZeroTermString <*> getZeroTermString
-      2 -> WRQ <$> getZeroTermString <*> getZeroTermString
+      1 -> RRQ <$> getZeroTermString <*> get
+      2 -> WRQ <$> getZeroTermString <*> get
       3 -> DTA <$> getWord16be <*> (BL.toStrict <$> getRemainingLazyByteString)
       4 -> ACK <$> getWord16be
       5 -> ERR <$> getWord16be <*> getZeroTermString
