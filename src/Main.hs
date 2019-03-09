@@ -6,6 +6,7 @@ import           Control.Monad             (void)
 import           Data.ByteString           as B
 import           Data.Functor              ((<&>))
 import           Data.Map.Strict           as Map
+import           Debug.Trace               (trace)
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
 import           TftpProto
@@ -23,7 +24,7 @@ tftpBlockSize = 512
 
 -- State Handling
 
-data Connection = Reading B.ByteString
+newtype Connection = Reading B.ByteString
 
 type Client = S.SockAddr
 type State = Map.Map Client Connection
@@ -36,18 +37,25 @@ getDataBlock :: Int -> B.ByteString -> Request
 getDataBlock n = DTA (fromIntegral n) . getData
   where getData = B.take tftpBlockSize . B.drop ((n - 1) * tftpBlockSize)
 
-initiateConnection :: Request -> Maybe (Connection, Request)
-initiateConnection (RRQ _ Binary) = Just (Reading tftpTestData, firstData)
-  where firstData = getDataBlock 1 tftpTestData
-initiateConnection _ = Nothing
+continueConnection :: Request -> Connection -> Maybe (Connection, Request)
+continueConnection (ACK n) con@(Reading buf) = Just (con, getDataBlock (fromIntegral n + 1) buf)
+continueConnection _ _ = Nothing
+
+initiateConnection :: Client -> Request -> Maybe (Connection, Request)
+initiateConnection _ (RRQ _ Binary) = continueConnection (ACK 0) (Reading tftpTestData)
+initiateConnection _ _ = Nothing
+
+initiateConnectionWithLog :: Client -> Request -> Maybe (Connection, Request)
+initiateConnectionWithLog c req = trace ("New connection from " ++ show c ++ " " ++ show req) (initiateConnection c req)
 
 handleMessage :: State -> Client -> Request -> (State, Maybe Request)
-handleMessage s c r = maybe newConnection continueConnection (Map.lookup c s)
+handleMessage s client req = maybe new continue (Map.lookup client s)
   where
-    continueConnection _ = (s, Just (ERR IllegalOperation "Not implemented"))
-    newConnection = maybe failedConnection storeConnection (initiateConnection r)
-    failedConnection = (s, Just (ERR IllegalOperation "Establishing connection failed"))
-    storeConnection (connection, resp) = (Map.insert c connection s, Just resp)
+    continue con = maybe (delete client s, Nothing) store (continueConnection req con)
+    new = maybe failed store (initiateConnectionWithLog client req)
+    failed = errorOut s IllegalOperation "Establishing connection failed"
+    store (connection, resp) = (Map.insert client connection s, Just resp)
+    errorOut ns errCode msg = (ns, Just (ERR errCode msg))
 
 -- Control Flow
 
