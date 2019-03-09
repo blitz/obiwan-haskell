@@ -1,13 +1,10 @@
-{-# LANGUAGE OverloadedStrings #-}
-
-module TftpProto where
+module TftpProto (Request(..), decodePacket, encodePacket) where
 
 import           Data.Binary
 import           Data.Binary.Get
 import           Data.Binary.Put
 import qualified Data.ByteString      as B
 import qualified Data.ByteString.Lazy as BL
-import           Data.String          (fromString)
 import           Data.Text            (Text)
 import           Data.Text.Encoding   (decodeUtf8, encodeUtf8)
 import           Data.Word            (Word16)
@@ -59,3 +56,11 @@ instance Binary Request where
       4 -> ACK <$> getWord16be
       5 -> ERR <$> getWord16be <*> getZeroTermString
       _ -> fail "Unknown opcode"
+
+decodePacket :: B.ByteString -> Maybe Request
+decodePacket b = case decodeOrFail (BL.fromStrict b) of
+  Right (_, _, r) -> Just r
+  Left _          -> Nothing
+
+encodePacket :: Request -> B.ByteString
+encodePacket = BL.toStrict . encode

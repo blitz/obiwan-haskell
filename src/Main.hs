@@ -2,12 +2,9 @@
 
 module Main (main) where
 
-import           Control.Monad             (forever, void)
-import           Data.Binary               (decode, encode, get)
-import qualified Data.ByteString           as B
-import qualified Data.ByteString.Lazy      as BL
+import           Control.Monad             (forever)
+import           Data.Functor              ((<&>))
 import           Data.Text.Encoding        (encodeUtf8)
-import           Debug.Trace               (traceShow)
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
 import           TftpProto
@@ -20,9 +17,8 @@ getReply (RRQ filename _) = Just $ DTA 1 (encodeUtf8 "Foo!")
 getReply (ACK _)          = Nothing
 getReply _                = Nothing
 
-
-parseTftp :: B.ByteString -> Request
-parseTftp  = decode . BL.fromStrict
+maybeDo :: Maybe a -> (a -> IO ()) -> IO ()
+maybeDo m f = maybe (return ()) f m
 
 main :: IO ()
 main = S.withSocketsDo $ do
@@ -33,6 +29,4 @@ main = S.withSocketsDo $ do
 
   forever $ do
     (msg, client) <- SB.recvFrom sock 1500
-    case getReply $ parseTftp msg of
-      Just reply -> void (SB.sendTo sock (BL.toStrict (encode reply)) client)
-      Nothing    -> return ()
+    (decodePacket msg >>= getReply <&> encodePacket) `maybeDo` (\buf -> SB.sendAllTo sock buf client)
