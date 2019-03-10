@@ -63,7 +63,7 @@ handleMessage s client req = maybe new continue (Map.lookup client s)
       trace (show client ++ ": " ++ show msg) (ns, Just (ERR errCode msg))
 
 removeClients :: TftpState -> [Client] -> TftpState
-removeClients s clients = Map.withoutKeys s (Set.fromList clients)
+removeClients s = Map.withoutKeys s . Set.fromList
 
 -- Timeout Handling
 -- TODO Retransmissions
