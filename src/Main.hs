@@ -1,13 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Main
-  ( main
-  ) where
+module Main (main) where
 
+import qualified Data.ByteString     as B
 import           Data.Semigroup      ((<>))
 import qualified Foreign.Lua         as Lua
 import           Options.Applicative
 
+import           TftpContent         (fromKeyValuePairs)
 import           TftpServer
 
 data Arguments = Arguments
@@ -30,16 +30,14 @@ main :: IO ()
 main = do
   config <- execParser opts
 
-  Lua.run $ do
+  kvContent <- Lua.run $ do
     Lua.openlibs
     Lua.loadfile (luaScript config) >>=
       \case
-        Lua.OK -> Lua.call 0 0
+        Lua.OK -> Lua.call 0 1
         e -> error ("Failed to load Lua script: " ++ show e)
+    Lua.peekKeyValuePairs 1 :: Lua.Lua [(String, B.ByteString)]
 
-  serveTftp (tftpAddress config) (tftpService config)
+  serveTftp (tftpAddress config) (tftpService config) (fromKeyValuePairs kvContent)
   where
-    opts =
-      info
-        (arguments <**> helper)
-        (fullDesc <> progDesc "Obiwan Scriptable TFTP Server")
+    opts = info (arguments <**> helper) (fullDesc <> progDesc "Obiwan Scriptable TFTP Server")

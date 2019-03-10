@@ -5,11 +5,12 @@ module TftpServer (serveTftp) where
 import           Control.Concurrent        (forkIO)
 import           Control.Monad             (void)
 import qualified Data.ByteString           as B
-import           Data.String               (fromString)
+import           Data.Text                 (pack, unpack)
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
 import           System.Timeout            (timeout)
 
+import           TftpContent               (Content, getContent)
 import           TftpProto
 
 -- Configuration
@@ -19,10 +20,6 @@ tftpTimeoutMs = 10 * 1000000
 
 tftpMaxPacketSize :: Int
 tftpMaxPacketSize = 9000
-
-tftpTestData :: B.ByteString
-tftpTestData =
-  "Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur?"
 
 tftpBlockSize :: Int
 tftpBlockSize = 512
@@ -40,20 +37,28 @@ getDataBlock :: Int -> B.ByteString -> Request
 getDataBlock n = DTA (fromIntegral n) . getData
   where getData = B.take tftpBlockSize . B.drop ((n - 1) * tftpBlockSize)
 
-continueConnection :: Request -> Connection -> Maybe (Connection, Request)
-continueConnection (ACK n) con@(Reading buf) = Just (con, getDataBlock (fromIntegral n + 1) buf)
-continueConnection (RRQ _ Binary) _ = continueConnection (ACK 0) (Reading tftpTestData)
-continueConnection _ _ = Nothing
+continueConnection :: Content -> Connection -> Request -> Maybe (Connection, Request)
+continueConnection _ con@(Reading buf) (ACK n) = Just (con, getDataBlock (fromIntegral n + 1) buf)
+continueConnection content _ (RRQ filename Binary) = case getContent content (unpack filename) of
+  Just buf -> continueConnection content (Reading buf) (ACK 0)
+  Nothing  -> Just (Pristine, ERR FileNotFound "No such file")
+continueConnection _ _ _ = Nothing
 
 -- High-level flow for the TFTP UDP server
 
-handleClient :: Client -> S.Socket -> B.ByteString -> IO ()
-handleClient client socket = handleReceivedData Pristine
+putMsg :: Client -> String -> IO ()
+putMsg client msg = putStrLn $ show client ++ " | " ++ msg
+
+handleClient :: Content -> Client -> S.Socket -> B.ByteString -> IO ()
+handleClient content client socket = handleReceivedData Pristine
   where
     handleReceivedData state msg = maybe closeWithDecodingError (handleDecoded state) $ decodePacket msg
     handleDecoded state decoded =
-      maybe closeWithReponseError (uncurry sendReponse) $ continueConnection decoded state
+      maybe closeWithReponseError (uncurry sendReponse) $ continueConnection content state decoded
     sendReponse state resp = do
+      case resp of
+        (ERR _ errMsg) -> putMsg client $ "error: " ++ unpack errMsg
+        _              -> return ()
       SB.sendAll socket $ encodePacket resp
       nextMsg <- timeout tftpTimeoutMs (SB.recvFrom socket tftpMaxPacketSize)
       maybe closeWithTimeout (\(msg, _) -> handleReceivedData state msg) nextMsg
@@ -61,9 +66,9 @@ handleClient client socket = handleReceivedData Pristine
     closeWithDecodingError = closeWithError IllegalOperation "Failed to parse packet"
     closeWithReponseError = closeWithError IllegalOperation "Unknown request"
     closeWithError errCode errMsg = do
-      putStrLn (show client ++ " triggered error " ++ errMsg)
-      SB.sendAll socket $ encodePacket $ ERR errCode (fromString errMsg)
-    closeWithTimeout = putStrLn (show client ++ " reached timeout.")
+      putMsg client ("error: " ++ errMsg)
+      SB.sendAll socket $ encodePacket $ ERR errCode (pack errMsg)
+    closeWithTimeout = putMsg client "timeout"
 
 createBoundUdpSocket :: String -> String -> IO S.Socket
 createBoundUdpSocket address service = do
@@ -86,16 +91,16 @@ loopForever :: a -> (a -> IO a) -> IO ()
 loopForever s f = void (loopForever_ s)
   where loopForever_ s_ = f s_ >>= (`loopForever` f)
 
-serveTftp :: String -> String -> IO ()
-serveTftp address service = S.withSocketsDo $ do
+serveTftp :: String -> String -> Content -> IO ()
+serveTftp address service content = S.withSocketsDo $ do
   serverSocket <- createBoundUdpSocket address service
   putStrLn $ "Listening on " ++ address ++ ":" ++ service
 
   loopForever () $ \_ -> do
     (initialMsg, client) <- SB.recvFrom serverSocket tftpMaxPacketSize
     void $ forkIO $ do
-      putStrLn $ "Creating socket for " ++ show client
+      putStrLn $ show client ++ " | creating session"
       clientSocket <- createConnectedUdpSocket client
-      handleClient client clientSocket initialMsg
-      putStrLn $ "Closing connection for " ++ show client
+      handleClient content client clientSocket initialMsg
+      putStrLn $ show client ++ " | closing session"
       S.close clientSocket

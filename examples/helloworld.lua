@@ -1,1 +1,3 @@
-print("Lua interpreter loaded")
+root = {["luaversion"] = _VERSION}
+
+return root
