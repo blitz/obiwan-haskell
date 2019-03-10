@@ -89,6 +89,7 @@ loopForever s f = void (loopForever_ s)
 serveTftp :: String -> String -> IO ()
 serveTftp address service = S.withSocketsDo $ do
   serverSocket <- createBoundUdpSocket address service
+  putStrLn $ "Listening on " ++ address ++ ":" ++ service
 
   loopForever () $ \_ -> do
     (initialMsg, client) <- SB.recvFrom serverSocket tftpMaxPacketSize
