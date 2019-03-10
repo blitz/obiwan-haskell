@@ -5,11 +5,9 @@ module Main (main) where
 import           Control.Monad             (void)
 import qualified Data.ByteString           as B
 import           Data.Functor              ((<&>))
-import           Data.List                 ((\\))
 import qualified Data.Map.Strict           as Map
 import qualified Data.PQueue.Min           as PQ
 import qualified Data.Set                  as Set
-import           Debug.Trace               (trace)
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
 import           System.Clock
@@ -49,18 +47,13 @@ continueConnection (ACK n) con@(Reading buf) = Just (con, getDataBlock (fromInte
 continueConnection (RRQ _ Binary) _ = continueConnection (ACK 0) (Reading tftpTestData)
 continueConnection _ _ = Nothing
 
-initiateConnection :: Client -> Request -> Maybe (Connection, Request)
-initiateConnection c req = trace (show c ++ ": " ++ show req) (continueConnection req Pristine)
-
-handleMessage :: TftpState -> Client -> Request -> (TftpState, Maybe Request)
-handleMessage s client req = maybe new continue (Map.lookup client s)
+handleMessage :: TftpState -> Client -> Request -> (TftpState, Request)
+handleMessage s client req = maybe (continue Pristine) continue (Map.lookup client s)
   where
-    continue con = maybe (Map.delete client s, Nothing) store (continueConnection req con)
-    new = maybe failed store (initiateConnection client req)
-    failed = errorOut s IllegalOperation "Establishing connection failed"
-    store (connection, resp) = (Map.insert client connection s, Just resp)
-    errorOut ns errCode msg =
-      trace (show client ++ ": " ++ show msg) (ns, Just (ERR errCode msg))
+    continue con = maybe failedContinue store (continueConnection req con)
+    store (connection, resp) = (Map.insert client connection s, resp)
+    failedContinue = errorOut IllegalOperation "Illegal or unsupported command"
+    errorOut errCode msg = (Map.delete client s, ERR errCode msg)
 
 removeClients :: TftpState -> [Client] -> TftpState
 removeClients s = Map.withoutKeys s . Set.fromList
@@ -97,9 +90,6 @@ processTimeouts s now = (map snd tuples, newQueue)
 
 -- Control Flow
 
-maybeDo :: Maybe a -> (a -> IO ()) -> IO ()
-maybeDo m f = maybe (return ()) f m
-
 loopForever :: a -> (a -> IO a) -> IO ()
 loopForever s f = void (loopForever_ s)
   where loopForever_ s_ = f s_ >>= (`loopForever` f)
@@ -107,8 +97,8 @@ loopForever s f = void (loopForever_ s)
 handlePacket :: S.Socket -> Client -> B.ByteString -> TftpState -> IO TftpState
 handlePacket sock client msg state =
   case decodePacket msg <&> handleMessage state client of
-      Just (newTftpState, maybeReq) -> do
-        maybeDo maybeReq (\buf -> SB.sendAllTo sock (encodePacket buf) client)
+      Just (newTftpState, resp) -> do
+        SB.sendAllTo sock (encodePacket resp) client
         return newTftpState
       Nothing ->
         return state
