@@ -22,4 +22,5 @@ executable obiwan
                        network >= 2.8 && < 3,
                        bytestring,
                        text,
-                       binary >= 0.8
+                       binary >= 0.8,
+                       optparse-applicative
