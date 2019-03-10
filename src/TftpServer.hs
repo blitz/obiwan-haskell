@@ -38,10 +38,16 @@ getDataBlock n = DTA (fromIntegral n) . getData
   where getData = B.take tftpBlockSize . B.drop ((n - 1) * tftpBlockSize)
 
 continueConnection :: Content -> Connection -> Request -> Maybe (Connection, Request)
-continueConnection _ con@(Reading buf) (ACK n) = Just (con, getDataBlock (fromIntegral n + 1) buf)
+
+-- The client requests to open a file for reading
 continueConnection content _ (RRQ filename Binary) = case getContent content (unpack filename) of
   Just buf -> continueConnection content (Reading buf) (ACK 0)
   Nothing  -> Just (Pristine, ERR FileNotFound "No such file")
+
+-- The client acknowledged a data packet. Send the next.
+continueConnection _ con@(Reading buf) (ACK n) = Just (con, getDataBlock (fromIntegral n + 1) buf)
+
+-- No clue what happened. Close the connection.
 continueConnection _ _ _ = Nothing
 
 -- High-level flow for the TFTP UDP server
