@@ -116,6 +116,10 @@ main = S.withSocketsDo $ do
   loopForever (emptyTftpState, emptyTimeoutState) $ \(state, timeouts) -> do
     (msg, client) <- SB.recvFrom sock 1500
 
+    -- To conform to the spec, we should open a new socket here for new clients,
+    -- so the connection gets a unique source port. For our simple usage,
+    -- re-using the TFTP server port seems to be okay.
+
     (expiredClients, newTimeoutState) <- handleTimeouts timeouts client <$> getTime timeoutClock
     newState <- handlePacket sock client msg $ removeClients state expiredClients
 
