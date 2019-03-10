@@ -10,17 +10,18 @@ import           TftpServer
 data Arguments = Arguments
   { tftpAddress :: String
   , tftpService :: String
+  , luaScript   :: FilePath
   }
 
 arguments :: Parser Arguments
 arguments =
-  Arguments <$>
-  strOption
-    (long "address" <> metavar "ADDRESS" <> value "127.0.0.1" <> showDefault <>
-     help "The address to listen on.") <*>
-  strOption
-    (long "port" <> metavar "PORT" <> value "tftp" <> showDefault <>
-     help "The UDP port the server will listen on")
+  Arguments
+  <$> strOption (long "address" <> metavar "ADDRESS" <> value "127.0.0.1" <> showDefault <>
+                 help "The address to listen on.")
+  <*> strOption (long "port" <> short 'p' <> metavar "PORT" <> value "tftp" <> showDefault <>
+                 help "The UDP port the server will listen on")
+  <*> strOption (long "script" <> short 's' <> metavar "FILE" <>
+                 help "A Lua script that populates the content the TFTP server will serve")
 
 main :: IO ()
 main = do
@@ -30,4 +31,4 @@ main = do
     opts =
       info
         (arguments <**> helper)
-        (fullDesc <> progDesc "Configurable TFTP server")
+        (fullDesc <> progDesc "Obiwan Scriptable TFTP Server")
