@@ -2,11 +2,12 @@
 
 module Main (main) where
 
-import           Control.Monad             (unless, void)
+import           Control.Monad             (void)
 import qualified Data.ByteString           as B
 import           Data.Functor              ((<&>))
 import           Data.List                 ((\\))
 import qualified Data.Map.Strict           as Map
+import qualified Data.PQueue.Min           as PQ
 import qualified Data.Set                  as Set
 import           Debug.Trace               (trace)
 import qualified Network.Socket            as S
@@ -76,23 +77,23 @@ connectionTimeout :: TimeSpec
 connectionTimeout = TimeSpec 10 0
 
 -- Remember the time of the last packet of a client
--- TODO This should be a priority queue
-type TimeoutState = [(Client, TimeSpec)]
+type TimeoutQueue = PQ.MinQueue (TimeSpec, Client)
 
-emptyTimeoutState :: TimeoutState
-emptyTimeoutState = []
+emptyTimeoutState :: TimeoutQueue
+emptyTimeoutState = PQ.empty
 
 -- Update the timeout for a specific client.
-updateTimeout :: TimeoutState -> Client -> TimeSpec -> TimeoutState
-updateTimeout s client now = (client, now) : filter isNotReplaced s
-  where isNotReplaced (c, _) = c /= client
+updateTimeout :: TimeoutQueue -> Client -> TimeSpec -> TimeoutQueue
+updateTimeout s client now = PQ.insert (now, client) $ PQ.filter isNotReplaced s
+  where isNotReplaced (_, c) = c /= client
 
 -- Find all clients that timed out, remove them from the timeout list and return
 -- them.
-processTimeouts :: TimeoutState -> TimeSpec -> ([Client], TimeoutState)
-processTimeouts s now = (map fst oldEntries, s Data.List.\\ oldEntries)
-  where oldEntries = filter isOld s
-        isOld (_, time) = (now - time) > connectionTimeout
+processTimeouts :: TimeoutQueue -> TimeSpec -> ([Client], TimeoutQueue)
+processTimeouts s now = (map snd tuples, newQueue)
+  where (tuples, newQueue) = PQ.span isOld s
+        isOld (time, _) = time < timeoutAbs
+        timeoutAbs = now - connectionTimeout
 
 -- Control Flow
 
@@ -112,7 +113,7 @@ handlePacket sock client msg state =
       Nothing ->
         return state
 
-handleTimeouts :: TimeoutState -> Client -> TimeSpec -> ([Client], TimeoutState)
+handleTimeouts :: TimeoutQueue -> Client -> TimeSpec -> ([Client], TimeoutQueue)
 handleTimeouts s client now = processTimeouts (updateTimeout s client now) now
 
 main :: IO ()

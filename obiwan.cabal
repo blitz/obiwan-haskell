@@ -24,4 +24,5 @@ executable obiwan
                        text,
                        binary >= 0.8,
                        containers,
-                       clock
+                       clock,
+                       pqueue
