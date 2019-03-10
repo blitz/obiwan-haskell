@@ -82,9 +82,9 @@ loopForever :: a -> (a -> IO a) -> IO ()
 loopForever s f = void (loopForever_ s)
   where loopForever_ s_ = f s_ >>= (`loopForever` f)
 
-serveTftp :: String -> IO ()
-serveTftp tftpService = S.withSocketsDo $ do
-  serverSocket <- createBoundUdpSocket "127.0.0.1" tftpService
+serveTftp :: String -> String -> IO ()
+serveTftp address service = S.withSocketsDo $ do
+  serverSocket <- createBoundUdpSocket address service
 
   loopForever () $ \_ -> do
     (initialMsg, client) <- SB.recvFrom serverSocket tftpMaxPacketSize
