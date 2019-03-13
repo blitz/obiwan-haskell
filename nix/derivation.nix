@@ -1,5 +1,5 @@
-{ mkDerivation, base, binary, bytestring, hslua, network
-, optparse-applicative, stdenv, text
+{ mkDerivation, base, binary, bytestring, filepattern, hslua
+, network, optparse-applicative, stdenv, text
 }:
 mkDerivation {
   pname = "obiwan";
@@ -8,7 +8,8 @@ mkDerivation {
   isLibrary = false;
   isExecutable = true;
   executableHaskellDepends = [
-    base binary bytestring hslua network optparse-applicative text
+    base binary bytestring filepattern hslua network
+    optparse-applicative text
   ];
   homepage = "https://github.com/blitz/obiwan#readme";
   license = stdenv.lib.licenses.agpl3;

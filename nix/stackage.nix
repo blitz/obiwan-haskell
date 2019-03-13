@@ -24098,8 +24098,8 @@ inherit (pkgs) libjpeg; inherit (pkgs) libpng; inherit (pkgs) zlib;};
            license = stdenv.lib.licenses.mit;
          }) {};
       "obiwan" = callPackage
-        ({ mkDerivation, base, binary, bytestring, hslua, network
-         , optparse-applicative, stdenv, text
+        ({ mkDerivation, base, binary, bytestring, filepattern, hslua
+         , network, optparse-applicative, stdenv, text
          }:
          mkDerivation {
            pname = "obiwan";
@@ -24108,7 +24108,8 @@ inherit (pkgs) libjpeg; inherit (pkgs) libpng; inherit (pkgs) zlib;};
            isLibrary = false;
            isExecutable = true;
            executableHaskellDepends = [
-             base binary bytestring hslua network optparse-applicative text
+             base binary bytestring filepattern hslua network
+             optparse-applicative text
            ];
            doHaddock = false;
            doCheck = false;
