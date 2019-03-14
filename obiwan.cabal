@@ -35,7 +35,7 @@ executable obiwan
                        optparse-applicative >= 0.14.3,
                        obiwan
 
-test-suite epoxy-harden-test
+test-suite obiwan-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Spec.hs

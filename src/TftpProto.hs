@@ -70,7 +70,6 @@ instance Binary RequestMode where
 
   get =  do
     modeStr <- getZeroTermString
-    -- TODO This needs to be a case-insensitive match.
     case CI.mk modeStr of
       "netascii" -> return Ascii
       "octet"    -> return Binary
