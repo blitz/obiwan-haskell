@@ -24104,7 +24104,7 @@ inherit (pkgs) libjpeg; inherit (pkgs) libpng; inherit (pkgs) zlib;};
          mkDerivation {
            pname = "obiwan";
            version = "0.1.0.0";
-           src = ./.;
+           src = ../.;
            isLibrary = false;
            isExecutable = true;
            executableHaskellDepends = [
