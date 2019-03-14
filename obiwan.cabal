@@ -22,7 +22,6 @@ library
                        binary >= 0.8,
                        bytestring,
                        network >= 2.8 && < 3,
-                       text,
                        filepattern
 
 executable obiwan

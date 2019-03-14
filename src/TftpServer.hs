@@ -5,7 +5,6 @@ module TftpServer (serveTftp) where
 import           Control.Concurrent        (forkIO)
 import           Control.Monad             (void)
 import qualified Data.ByteString           as B
-import           Data.Text                 (pack, unpack)
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
 import           System.Timeout            (timeout)
@@ -40,7 +39,7 @@ getDataBlock n = DTA (fromIntegral n) . getData
 continueConnection :: Content -> Connection -> Request -> Maybe (Connection, Request)
 
 -- The client requests to open a file for reading
-continueConnection content _ (RRQ filename Binary) = case getContent content (unpack filename) of
+continueConnection content _ (RRQ filename Binary) = case getContent content filename of
   Just buf -> continueConnection content (Reading buf) (ACK 0)
   Nothing  -> Just (Pristine, ERR FileNotFound "No such file")
 
@@ -63,7 +62,7 @@ handleClient content client socket = handleReceivedData Pristine
       maybe closeWithReponseError (uncurry sendReponse) $ continueConnection content state decoded
     sendReponse state resp = do
       case resp of
-        (ERR _ errMsg) -> putMsg client $ "error: " ++ unpack errMsg
+        (ERR _ errMsg) -> putMsg client $ "error: " ++ errMsg
         _              -> return ()
       SB.sendAll socket $ encodePacket resp
       nextMsg <- timeout tftpTimeoutMs (SB.recvFrom socket tftpMaxPacketSize)
@@ -73,7 +72,7 @@ handleClient content client socket = handleReceivedData Pristine
     closeWithReponseError = closeWithError IllegalOperation "Unknown request"
     closeWithError errCode errMsg = do
       putMsg client ("error: " ++ errMsg)
-      SB.sendAll socket $ encodePacket $ ERR errCode (pack errMsg)
+      SB.sendAll socket $ encodePacket $ ERR errCode errMsg
     closeWithTimeout = putMsg client "timeout"
 
 createBoundUdpSocket :: String -> String -> IO S.Socket

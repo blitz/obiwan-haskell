@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 -- Protocol definitions for TFTP v2 (RFC 1350)
 -- https://tools.ietf.org/html/rfc1350
 
@@ -13,11 +11,10 @@ module TftpProto (Request(..), RequestError(..), RequestMode(..),
 import           Data.Binary
 import           Data.Binary.Get
 import           Data.Binary.Put
-import qualified Data.ByteString      as B
-import qualified Data.ByteString.Lazy as BL
-import           Data.Text            (Text)
-import           Data.Text.Encoding   (decodeUtf8, encodeUtf8)
-import           Data.Word            (Word16)
+import qualified Data.ByteString       as B
+import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Lazy  as BL
+import           Data.Word             (Word16)
 
 data RequestError = FileNotFound
   | AccessViolation
@@ -31,18 +28,18 @@ data RequestError = FileNotFound
 data RequestMode = Binary | Ascii
   deriving (Eq, Show)
 
-data Request = RRQ !Text !RequestMode
-             | WRQ !Text !RequestMode
+data Request = RRQ !String !RequestMode
+             | WRQ !String !RequestMode
              | DTA !Word16 !B.ByteString
              | ACK !Word16
-             | ERR !RequestError !Text
+             | ERR !RequestError !String
   deriving (Eq, Show)
 
-putZeroTermString :: Text -> Put
-putZeroTermString t = putByteString (encodeUtf8 t) >> putWord8 0
+putZeroTermString :: String -> Put
+putZeroTermString t = putByteString (BC.pack t) >> putWord8 0
 
-getZeroTermString :: Get Text
-getZeroTermString = decodeUtf8 . BL.toStrict <$> getLazyByteStringNul
+getZeroTermString :: Get String
+getZeroTermString = BC.unpack . BL.toStrict <$> getLazyByteStringNul
 
 instance Binary RequestError where
   put FileNotFound     = putWord16be 1
