@@ -19,7 +19,7 @@ tftpTimeoutMs :: Int
 tftpTimeoutMs = 10 * 1000000
 
 tftpMaxPacketSize :: Int
-tftpMaxPacketSize = 9000
+tftpMaxPacketSize = 65536       -- Largest possible IP packet
 
 tftpBlockSize :: Int
 tftpBlockSize = 512

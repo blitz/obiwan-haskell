@@ -3,6 +3,10 @@
 -- Protocol definitions for TFTP v2 (RFC 1350)
 -- https://tools.ietf.org/html/rfc1350
 
+-- TODO Blocksize options
+-- https://tools.ietf.org/html/rfc2347
+-- https://tools.ietf.org/html/rfc2348
+
 module TftpProto (Request(..), RequestError(..), RequestMode(..),
                   decodePacket, encodePacket) where
 
@@ -66,6 +70,7 @@ instance Binary RequestMode where
 
   get =  do
     modeStr <- getZeroTermString
+    -- TODO This needs to be a case-insensitive match.
     case modeStr of
       "netascii" -> return Ascii
       "octet"    -> return Binary
