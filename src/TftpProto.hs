@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 -- Protocol definitions for TFTP v2 (RFC 1350)
 -- https://tools.ietf.org/html/rfc1350
 
@@ -14,6 +16,7 @@ import           Data.Binary.Put
 import qualified Data.ByteString       as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy  as BL
+import qualified Data.CaseInsensitive  as CI
 import           Data.Word             (Word16)
 
 data RequestError = FileNotFound
@@ -68,7 +71,7 @@ instance Binary RequestMode where
   get =  do
     modeStr <- getZeroTermString
     -- TODO This needs to be a case-insensitive match.
-    case modeStr of
+    case CI.mk modeStr of
       "netascii" -> return Ascii
       "octet"    -> return Binary
       _          -> fail "Unknown mode"
