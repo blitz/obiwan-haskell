@@ -6,10 +6,19 @@
 -- TODO Blocksize options
 -- https://tools.ietf.org/html/rfc2347
 -- https://tools.ietf.org/html/rfc2348
+-- https://tools.ietf.org/html/rfc2349
 
-module TftpProto (Request(..), RequestError(..), RequestMode(..),
-                  decodePacket, encodePacket) where
+module TftpProto
+  ( Request(..)
+  , RequestError(..)
+  , RequestMode(..)
+  , RequestOption(..)
+  , decodePacket
+  , encodePacket
+  ) where
 
+import           Control.Applicative   (many)
+import           Control.Monad         (guard)
 import           Data.Binary
 import           Data.Binary.Get
 import           Data.Binary.Put
@@ -31,11 +40,18 @@ data RequestError = FileNotFound
 data RequestMode = Binary | Ascii
   deriving (Eq, Show)
 
-data Request = RRQ !String !RequestMode
-             | WRQ !String !RequestMode
+data RequestOption = BlksizeOption Int       -- RFC2348
+            -- | Timeout Int       -- RFC2349
+            -- | TransferSize Int  -- RFC2349
+            | UnknownOption String String
+  deriving (Eq, Show)
+
+data Request = RRQ !String !RequestMode ![RequestOption]
+             | WRQ !String !RequestMode ![RequestOption]
              | DTA !Word16 !B.ByteString
              | ACK !Word16
              | ERR !RequestError !String
+             | OACK ![RequestOption]
   deriving (Eq, Show)
 
 putZeroTermString :: String -> Put
@@ -43,6 +59,14 @@ putZeroTermString t = putByteString (BC.pack t) >> putWord8 0
 
 getZeroTermString :: Get String
 getZeroTermString = BC.unpack . BL.toStrict <$> getLazyByteStringNul
+
+-- TODO This is b0rken, because "read" will silently generate garbage integers
+-- when Int overflows.
+toInt :: String -> Maybe Int
+toInt = Just . read
+
+inBounds :: Int -> Int -> Int -> Maybe Int
+inBounds loBound hiBound v = guard ((v >= loBound) && (v <= hiBound)) >> return v
 
 instance Binary RequestError where
   put FileNotFound     = putWord16be 1
@@ -75,16 +99,43 @@ instance Binary RequestMode where
       "octet"    -> return Binary
       _          -> fail "Unknown mode"
 
+instance Binary RequestOption where
+  put (BlksizeOption b) = do
+    putZeroTermString "blksize"
+    putZeroTermString (show b)
+
+  put (UnknownOption k v) = do
+    putZeroTermString k
+    putZeroTermString v
+
+  get = do
+    optionName <- getZeroTermString
+    optionValue <- getZeroTermString
+    case CI.mk optionName of
+      "blksize" -> maybe (fail "Integer out of bounds") (pure . BlksizeOption) blksizeValue
+        where blksizeValue = toInt optionValue >>= inBounds 8 65464
+      _         -> pure $ UnknownOption optionName optionValue
+
+-- TODO This ignores everything after options that trigger a failure case, i.e.
+-- any option after a blksize option with length 0 would be ignored.
+getOptionList :: Get [RequestOption]
+getOptionList = many get
+
+putOptionList :: [RequestOption] -> Put
+putOptionList = mapM_ put
+
 instance Binary Request where
-  put (RRQ filename mode) = do
+  put (RRQ filename mode options) = do
     putWord16be 1
     putZeroTermString filename
     put mode
+    putOptionList options
 
-  put (WRQ filename mode) = do
+  put (WRQ filename mode options) = do
     putWord16be 2
     putZeroTermString filename
     put mode
+    putOptionList options
 
   put (DTA block fData) = do
     putWord16be 3
@@ -100,14 +151,19 @@ instance Binary Request where
     put errCode
     putZeroTermString errMsg
 
+  put (OACK options) = do
+    putWord16be 6
+    putOptionList options
+
   get = do
     opcode <- getWord16be
     case opcode of
-      1 -> RRQ <$> getZeroTermString <*> get
-      2 -> WRQ <$> getZeroTermString <*> get
+      1 -> RRQ <$> getZeroTermString <*> get <*> getOptionList
+      2 -> WRQ <$> getZeroTermString <*> get <*> getOptionList
       3 -> DTA <$> getWord16be <*> (BL.toStrict <$> getRemainingLazyByteString)
       4 -> ACK <$> getWord16be
       5 -> ERR <$> get <*> getZeroTermString
+      6 -> OACK <$> getOptionList
       _ -> fail "Unknown opcode"
 
 decodePacket :: B.ByteString -> Maybe Request

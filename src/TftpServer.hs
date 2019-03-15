@@ -39,7 +39,7 @@ getDataBlock n = DTA (fromIntegral n) . getData
 continueConnection :: Content -> Connection -> Request -> Maybe (Connection, Request)
 
 -- The client requests to open a file for reading
-continueConnection content _ (RRQ filename Binary) = case getContent content filename of
+continueConnection content _ (RRQ filename Binary _) = case getContent content filename of
   Just buf -> continueConnection content (Reading buf) (ACK 0)
   Nothing  -> Just (Pristine, ERR FileNotFound "No such file")
 
