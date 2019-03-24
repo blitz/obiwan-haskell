@@ -20,31 +20,33 @@ tftpTimeoutMs = 10 * 1000000
 tftpMaxPacketSize :: Int
 tftpMaxPacketSize = 65536       -- Largest possible IP packet
 
-tftpBlockSize :: Int
+type Blocksize = Int
+
+tftpBlockSize :: Blocksize
 tftpBlockSize = 512
 
 -- TFTP State Handling
 data Connection
   = Pristine
-  | Reading B.ByteString
+  | Reading B.ByteString Blocksize
   deriving (Eq, Show)
 
 type Client = S.SockAddr
 
 -- Get the nth data block for a connection. Block numbers start at 1.
-getDataBlock :: Int -> B.ByteString -> Request
-getDataBlock n = DTA (fromIntegral n) . getData
-  where getData = B.take tftpBlockSize . B.drop ((n - 1) * tftpBlockSize)
+getDataBlock :: Int -> Blocksize -> B.ByteString -> Request
+getDataBlock n blksize = DTA (fromIntegral n) . getData
+  where getData = B.take blksize . B.drop ((n - 1) * blksize)
 
 continueConnection :: Content -> Connection -> Request -> Maybe (Connection, Request)
 
 -- The client requests to open a file for reading
 continueConnection content _ (RRQ filename Binary _) = case getContent content filename of
-  Just buf -> continueConnection content (Reading buf) (ACK 0)
+  Just buf -> continueConnection content (Reading buf tftpBlockSize) (ACK 0)
   Nothing  -> Just (Pristine, ERR FileNotFound "No such file")
 
 -- The client acknowledged a data packet. Send the next.
-continueConnection _ con@(Reading buf) (ACK n) = Just (con, getDataBlock (fromIntegral n + 1) buf)
+continueConnection _ con@(Reading buf blksize) (ACK n) = Just (con, getDataBlock (fromIntegral n + 1) blksize buf)
 
 -- No clue what happened. Close the connection.
 continueConnection _ _ _ = Nothing
