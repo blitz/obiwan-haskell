@@ -4,7 +4,10 @@ module TftpServer (serveTftp) where
 
 import           Control.Concurrent        (forkIO)
 import           Control.Monad             (void)
+import           Control.Monad.State.Lazy  (State, runState, state)
 import qualified Data.ByteString           as B
+import           Data.Functor              ((<&>))
+import           Data.Maybe                (catMaybes)
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
 import           System.Timeout            (timeout)
@@ -38,15 +41,34 @@ getDataBlock :: Int -> Blocksize -> B.ByteString -> Request
 getDataBlock n blksize = DTA (fromIntegral n) . getData
   where getData = B.take blksize . B.drop ((n - 1) * blksize)
 
-continueConnection :: Content -> Connection -> Request -> Maybe (Connection, Request)
+updateBlksize :: Connection -> Blocksize -> Connection
+updateBlksize (Reading dta _) blksize = Reading dta blksize
+updateBlksize Pristine _              = Pristine
+
+acknowledgeOption :: RequestOption -> Connection -> (Maybe RequestOption, Connection)
+acknowledgeOption blkOpt@(BlksizeOption blksize) conn = (Just blkOpt, updateBlksize conn blksize)
+acknowledgeOption _ conn = (Nothing, conn)
+
+acknowledgeOptions :: Connection -> [RequestOption] -> (Request, Connection)
+acknowledgeOptions conn options = runState ((mapM ackOption options <&> catMaybes) <&> OACK) conn
+  where
+    ackOption :: RequestOption -> State Connection (Maybe RequestOption)
+    ackOption o = state (acknowledgeOption o)
+
+continueConnection :: Content -> Connection -> Request -> Maybe (Request, Connection)
 
 -- The client requests to open a file for reading
-continueConnection content _ (RRQ filename Binary _) = case getContent content filename of
-  Just buf -> continueConnection content (Reading buf tftpBlockSize) (ACK 0)
-  Nothing  -> Just (Pristine, ERR FileNotFound "No such file")
+continueConnection content _ (RRQ filename Binary options) =
+  case getContent content filename of
+    Just buf -> if null options then
+                  continueConnection content newState (ACK 0)
+                else
+                  Just (acknowledgeOptions newState options)
+      where newState = Reading buf tftpBlockSize
+    Nothing  -> Just (ERR FileNotFound "No such file", Pristine)
 
 -- The client acknowledged a data packet. Send the next.
-continueConnection _ con@(Reading buf blksize) (ACK n) = Just (con, getDataBlock (fromIntegral n + 1) blksize buf)
+continueConnection _ con@(Reading buf blksize) (ACK n) = Just (getDataBlock (fromIntegral n + 1) blksize buf, con)
 
 -- No clue what happened. Close the connection.
 continueConnection _ _ _ = Nothing
@@ -62,7 +84,7 @@ handleClient content client socket = handleReceivedData Pristine
     handleReceivedData state msg = maybe closeWithDecodingError (handleDecoded state) $ decodePacket msg
     handleDecoded state decoded =
       maybe closeWithReponseError (uncurry sendReponse) $ continueConnection content state decoded
-    sendReponse state resp = do
+    sendReponse resp state = do
       case resp of
         (ERR _ errMsg) -> putMsg client $ "error: " ++ errMsg
         _              -> return ()

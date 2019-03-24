@@ -23,7 +23,8 @@ library
                        bytestring,
                        case-insensitive,
                        network >= 2.8 && < 3,
-                       filepattern
+                       filepattern,
+                       mtl
 
 executable obiwan
   hs-source-dirs:      app
