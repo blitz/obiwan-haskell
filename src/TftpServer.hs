@@ -29,6 +29,7 @@ tftpBlockSize :: Blocksize
 tftpBlockSize = 512
 
 -- TFTP State Handling
+
 data Connection
   = Pristine
   | Reading B.ByteString Blocksize
@@ -49,8 +50,11 @@ acknowledgeOption :: RequestOption -> Connection -> (Maybe RequestOption, Connec
 acknowledgeOption blkOpt@(BlksizeOption blksize) conn = (Just blkOpt, updateBlksize conn blksize)
 acknowledgeOption _ conn = (Nothing, conn)
 
+-- Any options we acknowledge need to be sent back to the client in an OACK
+-- packet. We can modify them as well, i.e. by reducing the block size in a
+-- blksize option.
 acknowledgeOptions :: Connection -> [RequestOption] -> (Request, Connection)
-acknowledgeOptions conn options = runState ((mapM ackOption options <&> catMaybes) <&> OACK) conn
+acknowledgeOptions conn options = runState (mapM ackOption options <&> catMaybes <&> OACK) conn
   where
     ackOption :: RequestOption -> State Connection (Maybe RequestOption)
     ackOption o = state (acknowledgeOption o)
@@ -81,16 +85,16 @@ putMsg client msg = putStrLn $ show client ++ " | " ++ msg
 handleClient :: Content -> Client -> S.Socket -> B.ByteString -> IO ()
 handleClient content client socket = handleReceivedData Pristine
   where
-    handleReceivedData state msg = maybe closeWithDecodingError (handleDecoded state) $ decodePacket msg
-    handleDecoded state decoded =
-      maybe closeWithReponseError (uncurry sendReponse) $ continueConnection content state decoded
-    sendReponse resp state = do
+    handleReceivedData conn msg = maybe closeWithDecodingError (handleDecoded conn) $ decodePacket msg
+    handleDecoded conn decoded =
+      maybe closeWithReponseError (uncurry sendReponse) $ continueConnection content conn decoded
+    sendReponse resp conn = do
       case resp of
         (ERR _ errMsg) -> putMsg client $ "error: " ++ errMsg
         _              -> return ()
       SB.sendAll socket $ encodePacket resp
       nextMsg <- timeout tftpTimeoutMs (SB.recvFrom socket tftpMaxPacketSize)
-      maybe closeWithTimeout (\(msg, _) -> handleReceivedData state msg) nextMsg
+      maybe closeWithTimeout (\(msg, _) -> handleReceivedData conn msg) nextMsg
 
     closeWithDecodingError = closeWithError IllegalOperation "Failed to parse packet"
     closeWithReponseError = closeWithError IllegalOperation "Unknown request"
