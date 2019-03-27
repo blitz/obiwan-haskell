@@ -18,11 +18,11 @@ library
   default-language:    Haskell2010
   ghc-options:         -fwarn-unused-imports
   exposed-modules:     TftpProto, TftpServer, TftpContent, TftpConnection
-  build-depends:       base >= 4.7 && < 5,
-                       binary >= 0.8,
+  build-depends:       base,
+                       binary,
                        bytestring,
                        case-insensitive,
-                       network >= 2.8 && < 3,
+                       network,
                        filepattern,
                        mtl,
                        unix
@@ -31,10 +31,10 @@ executable obiwan
   hs-source-dirs:      app
   main-is:             Main.hs
   default-language:    Haskell2010
-  build-depends:       base >= 4.7 && < 5,
+  build-depends:       base,
                        bytestring,
-                       hslua >= 1.0,
-                       optparse-applicative >= 0.14.3,
+                       hslua,
+                       optparse-applicative,
                        obiwan
 
 test-suite obiwan-test
