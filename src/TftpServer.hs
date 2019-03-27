@@ -22,18 +22,22 @@ tftpMaxPacketSize = 65536       -- Largest possible IP packet
 
 -- Type definitions and interface implementation
 
-type Client = S.SockAddr
+data Client = Client { clientAddress :: S.SockAddr
+                     , clientSocket  :: S.Socket
+                     }
 
-instance MonadIO m => MonadTftpConnection (ReaderT S.Socket m) where
+instance MonadIO m => MonadTftpConnection (ReaderT Client m) where
   recvData timeoutMs = do
-    socket <- ask
-    liftIO $ timeout timeoutMs $ SB.recvFrom socket tftpMaxPacketSize <&> fst
+    client <- ask
+    liftIO $ timeout timeoutMs $ SB.recvFrom (clientSocket client) tftpMaxPacketSize <&> fst
 
   sendData buf = do
-    socket <- ask
-    liftIO $ SB.sendAll socket buf
+    client <- ask
+    liftIO $ SB.sendAll (clientSocket client) buf
 
-  logMsg msg = liftIO $ putStrLn msg
+  logMsg msg = do
+    client <- ask
+    liftIO $ putStrLn $ show (clientAddress client) ++ " | " ++ msg
 
 -- Network helpers
 
@@ -48,11 +52,11 @@ createBoundUdpSocket address service = do
   S.bind sock (S.addrAddress addrInfo)
   return sock
 
-createConnectedUdpSocket :: Client -> IO S.Socket
-createConnectedUdpSocket client = do
+createConnectedUdpSocket :: S.SockAddr -> IO Client
+createConnectedUdpSocket sockaddr = do
   sock <- S.socket S.AF_INET S.Datagram 0
-  S.connect sock client
-  return sock
+  S.connect sock sockaddr
+  return $ Client sockaddr sock
 
 -- Main server loop
 
@@ -66,10 +70,12 @@ serveTftp address service content = S.withSocketsDo $ do
   putStrLn $ "Listening on " ++ address ++ ":" ++ service
 
   loopForever () $ \_ -> do
-    (initialMsg, client) <- SB.recvFrom serverSocket tftpMaxPacketSize
+    (initialMsg, sockaddr) <- SB.recvFrom serverSocket tftpMaxPacketSize
     void $ forkIO $ do
-      putStrLn $ show client ++ " | creating session"
-      clientSocket <- createConnectedUdpSocket client
-      runReaderT (handleClient content initialMsg) clientSocket
-      putStrLn $ show client ++ " | closing session"
-      S.close clientSocket
+      client <- createConnectedUdpSocket sockaddr
+      let clientSession = do
+            logMsg "creating session"
+            handleClient content initialMsg
+            logMsg "closing session"
+      runReaderT clientSession client
+      S.close (clientSocket client)
