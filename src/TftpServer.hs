@@ -3,12 +3,13 @@
 module TftpServer (serveTftp) where
 
 import           Control.Concurrent        (forkIO)
-import           Control.Monad             (void)
+import           Control.Monad             (void, when)
 import           Control.Monad.IO.Class    (MonadIO, liftIO)
 import           Control.Monad.Reader      (ReaderT, ask, runReaderT)
 import           Data.Functor              ((<&>))
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
+import qualified System.Posix.User         as P
 import           System.Timeout            (timeout)
 
 import           TftpConnection
@@ -57,6 +58,17 @@ createConnectedUdpSocket sockaddr = do
   S.connect sock sockaddr
   return $ Client sockaddr sock
 
+-- Privileges
+
+dropPrivileges :: IO ()
+dropPrivileges = do
+  uid <- P.getRealUserID
+  when (uid == 0) $ do
+    putStrLn "Dropping root privileges."
+    nobody <- P.getUserEntryForName "nobody"
+    P.setGroupID $ P.userGroupID nobody
+    P.setUserID $ P.userID nobody
+
 -- Main server loop
 
 loopForever :: a -> (a -> IO a) -> IO ()
@@ -67,7 +79,7 @@ serveTftp :: String -> String -> Content -> IO ()
 serveTftp address service content = S.withSocketsDo $ do
   serverSocket <- createBoundUdpSocket address service
   putStrLn $ "Listening on " ++ address ++ ":" ++ service
-
+  dropPrivileges
   loopForever () $ \_ -> do
     (initialMsg, sockaddr) <- SB.recvFrom serverSocket tftpMaxPacketSize
     void $ forkIO $ do
