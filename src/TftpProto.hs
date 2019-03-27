@@ -3,7 +3,6 @@
 -- Protocol definitions for TFTP v2 (RFC 1350)
 -- https://tools.ietf.org/html/rfc1350
 
--- TODO Blocksize options
 -- https://tools.ietf.org/html/rfc2347
 -- https://tools.ietf.org/html/rfc2348
 -- https://tools.ietf.org/html/rfc2349
