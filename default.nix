@@ -1,4 +1,7 @@
-let obiwanComponents = (import ./nix/build.nix { }).obiwan.components;
+{ nixpkgs ? import ./nix/nixpkgs.nix, pkgs ? import nixpkgs { } }:
+let
+  obiwanComponents =
+    (import ./nix/build.nix { inherit pkgs; }).obiwan.components;
 in {
   obiwan = obiwanComponents.exes.obiwan;
 
