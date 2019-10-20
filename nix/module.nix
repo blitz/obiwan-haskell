@@ -79,6 +79,13 @@ in {
         
         # TODO Would be nice to eventually support this.
         #DynamicUser = true;
+
+        # Security
+        NoNewPrivileges = true;
+        ProtectSystem = "strict";   # Read-only everything
+        PrivateTmp = true;
+        PrivateDevices = true;
+        # We could be more aggressive here.
       };
     };
   };
