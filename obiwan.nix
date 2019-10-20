@@ -43,7 +43,7 @@ in { system, compiler, flags, pkgs, hsPkgs, pkgconfPkgs, ... }:
     package = {
       specVersion = "1.10";
       identifier = { name = "obiwan"; version = "0.1.0.0"; };
-      license = "AGPL-3.0-only";
+      license = "LicenseRef-AGPL-3.0";
       copyright = "2019 Julian Stecklina";
       maintainer = "js@alien8.de";
       author = "Julian Stecklina";

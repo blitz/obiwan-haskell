@@ -3,7 +3,7 @@ version:             0.1.0.0
 -- synopsis:
 -- description:
 homepage:            https://github.com/blitz/obiwan#readme
-license:             AGPL-3
+license:             AGPL-3.0-or-later
 license-file:        LICENSE
 author:              Julian Stecklina
 maintainer:          js@alien8.de
