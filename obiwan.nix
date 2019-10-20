@@ -73,8 +73,8 @@ in { system, compiler, flags, pkgs, hsPkgs, pkgconfPkgs, ... }:
           depends = [
             (hsPkgs."base" or (buildDepError "base"))
             (hsPkgs."bytestring" or (buildDepError "bytestring"))
-            (hsPkgs."hslua" or (buildDepError "hslua"))
             (hsPkgs."optparse-applicative" or (buildDepError "optparse-applicative"))
+            (hsPkgs."utf8-string" or (buildDepError "utf8-string"))
             (hsPkgs."obiwan" or (buildDepError "obiwan"))
             ];
           buildable = true;

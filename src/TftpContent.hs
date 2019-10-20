@@ -5,8 +5,8 @@ module TftpContent (
   , getContent
   ) where
 
-import qualified Data.ByteString    as B
-import           Data.Maybe         (listToMaybe, mapMaybe)
+import qualified Data.ByteString as B
+import           Data.Maybe (listToMaybe, mapMaybe)
 import           System.FilePattern (FilePattern, match)
 
 data FileRule =
@@ -15,8 +15,6 @@ data FileRule =
 
 type Content = [FileRule]
 
--- TODO This needs to cover more use cases, including variable substitution. Or
--- should this be handled in Lua?
 fromKeyValuePairs :: [(String, B.ByteString)] -> Content
 fromKeyValuePairs = map toRule
   where
