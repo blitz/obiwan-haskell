@@ -69,11 +69,11 @@ in {
     };
 
     systemd.services.obiwan = {
-      description = "Obiwan TFTP Per-Connection Server";
+      description = "Obiwan TFTP Server";
 
       serviceConfig = {
         User = cfg.user;
-        ExecStart = "${cfg.package}/bin/obiwan --systemd";
+        ExecStart = "${cfg.package}/bin/obiwan --socket-activation";
 
         WorkDirectory = cfg.rootDir;
         

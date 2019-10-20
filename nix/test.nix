@@ -22,11 +22,10 @@ nixosTest {
   # TODO
   testScript = ''
     $server->start();
-    $server->waitForUnit("network-online.target");
-
-    print($server->execute("systemctl status obiwan.socket"));
-    print($server->execute("systemctl status obiwan.service"));
+    $server->waitForUnit("obiwan.socket");
     
-    $server->succeed("tftp -m binary localhost -c get /test");
+    $server->succeed("tftp -m binary localhost -c get hello.world");
+    $server->succeed("[ -f hello.world ]");
+    $server->succeed("[ \"\$(cat hello.world)\" = 'hello world' ]");
   '';
 }

@@ -2,33 +2,60 @@
 
 module Main (main) where
 
-import qualified Data.ByteString as B
 import           Data.ByteString.UTF8 as BSU
 import           Data.Semigroup ((<>))
+import           Network.Socket.Activation as NSA
 import           Options.Applicative
+import qualified Network.Socket as S
 
 import           TftpContent (fromKeyValuePairs)
 import           TftpServer
 
-data Arguments = Arguments
-  { tftpAddress :: String
-  , tftpService :: String
-  }
+-- Command-line parser
 
-arguments :: Parser Arguments
-arguments =
-  Arguments
+data Arguments
+  = Standalone String String
+  | SocketActivation
+
+standaloneArgs :: Parser Arguments
+standaloneArgs = Standalone
   <$> strOption (long "address" <> metavar "ADDRESS" <> value "127.0.0.1" <> showDefault <>
                  help "The address to listen on.")
   <*> strOption (long "port" <> short 'p' <> metavar "PORT" <> value "12345" <> showDefault <>
                  help "The UDP port the server will listen on")
 
+socketActivationArgs :: Parser Arguments
+socketActivationArgs = flag' SocketActivation
+  (  long "socket-activation"
+  <> help "Use systemd socket-activation mode")
+
+arguments :: Parser Arguments
+arguments = standaloneArgs <|> socketActivationArgs
+
+createBoundUdpSocket :: String -> String -> IO S.Socket
+createBoundUdpSocket address service = do
+  putStrLn $ "Listening on " ++ address ++ ":" ++ service
+  sock <- S.socket S.AF_UNSPEC S.Datagram 0
+  addrInfo:_ <-
+    S.getAddrInfo
+      (Just (S.defaultHints {S.addrSocketType = S.Datagram}))
+      (Just address)
+      (Just service)
+  S.bind sock (S.addrAddress addrInfo)
+  return sock
+
+argsToSocket :: Arguments -> IO (S.Socket)
+argsToSocket (Standalone address service) = createBoundUdpSocket address service
+argsToSocket (SocketActivation) =
+  NSA.getActivatedSockets >>= \case
+  Just [fd] -> return fd
+  otherwise -> fail "Received invalid number of file descriptors"
+
 main :: IO ()
 main = do
-  config <- execParser opts
-
-  let kvContent = [("foo", BSU.fromString "bar")]
-
-  serveTftp (tftpAddress config) (tftpService config) (fromKeyValuePairs kvContent)
+  putStrLn "Obiwan TFTP Server ready."
+  S.withSocketsDo $
+    execParser opts >>= argsToSocket >>= serveTftp kvContent
   where
     opts = info (arguments <**> helper) (fullDesc <> progDesc "Obiwan Scriptable TFTP Server")
+    kvContent = fromKeyValuePairs [("foo", BSU.fromString "bar")]

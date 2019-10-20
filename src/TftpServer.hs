@@ -3,13 +3,12 @@
 module TftpServer (serveTftp) where
 
 import           Control.Concurrent        (forkIO)
-import           Control.Monad             (void, when)
+import           Control.Monad             (void)
 import           Control.Monad.IO.Class    (MonadIO, liftIO)
 import           Control.Monad.Reader      (ReaderT, ask, runReaderT)
 import           Data.Functor              ((<&>))
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
-import qualified System.Posix.User         as P
 import           System.Timeout            (timeout)
 
 import           TftpConnection
@@ -41,33 +40,16 @@ instance MonadIO m => MonadTftpConnection (ReaderT Client m) where
 
 -- Network helpers
 
-createBoundUdpSocket :: String -> String -> IO S.Socket
-createBoundUdpSocket address service = do
-  sock <- S.socket S.AF_INET S.Datagram 0
-  addrInfo:_ <-
-    S.getAddrInfo
-      (Just (S.defaultHints {S.addrSocketType = S.Datagram}))
-      (Just address)
-      (Just service)
-  S.bind sock (S.addrAddress addrInfo)
-  return sock
-
 createConnectedUdpSocket :: S.SockAddr -> IO Client
 createConnectedUdpSocket sockaddr = do
-  sock <- S.socket S.AF_INET S.Datagram 0
+  putStrLn (show sockaddr)
+  sock <- S.socket addressFamily S.Datagram 0
   S.connect sock sockaddr
   return $ Client sockaddr sock
-
--- Privileges
-
-dropPrivileges :: IO ()
-dropPrivileges = do
-  uid <- P.getRealUserID
-  when (uid == 0) $ do
-    putStrLn "Dropping root privileges."
-    nobody <- P.getUserEntryForName "nobody"
-    P.setGroupID $ P.userGroupID nobody
-    P.setUserID $ P.userID nobody
+  where addressFamily = case sockaddr of
+                          S.SockAddrInet _ _ -> S.AF_INET
+                          S.SockAddrInet6 _ _ _ _ -> S.AF_INET6
+                          _ -> S.AF_UNSPEC
 
 -- Main server loop
 
@@ -75,11 +57,8 @@ loopForever :: a -> (a -> IO a) -> IO ()
 loopForever s f = void (loopForever_ s)
   where loopForever_ s_ = f s_ >>= (`loopForever` f)
 
-serveTftp :: String -> String -> Content -> IO ()
-serveTftp address service content = S.withSocketsDo $ do
-  serverSocket <- createBoundUdpSocket address service
-  putStrLn $ "Listening on " ++ address ++ ":" ++ service
-  dropPrivileges
+serveTftp :: Content -> S.Socket -> IO ()
+serveTftp content serverSocket = do
   loopForever () $ \_ -> do
     (initialMsg, sockaddr) <- SB.recvFrom serverSocket tftpMaxPacketSize
     void $ forkIO $ do
