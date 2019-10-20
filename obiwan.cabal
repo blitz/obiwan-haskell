@@ -33,7 +33,9 @@ executable obiwan
   default-language:    Haskell2010
   build-depends:       base,
                        bytestring,
+                       network,
                        optparse-applicative,
+                       socket-activation,
                        utf8-string,
                        obiwan
 

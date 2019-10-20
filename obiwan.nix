@@ -73,7 +73,9 @@ in { system, compiler, flags, pkgs, hsPkgs, pkgconfPkgs, ... }:
           depends = [
             (hsPkgs."base" or (buildDepError "base"))
             (hsPkgs."bytestring" or (buildDepError "bytestring"))
+            (hsPkgs."network" or (buildDepError "network"))
             (hsPkgs."optparse-applicative" or (buildDepError "optparse-applicative"))
+            (hsPkgs."socket-activation" or (buildDepError "socket-activation"))
             (hsPkgs."utf8-string" or (buildDepError "utf8-string"))
             (hsPkgs."obiwan" or (buildDepError "obiwan"))
             ];
