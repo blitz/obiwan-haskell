@@ -76,7 +76,6 @@ in { system, compiler, flags, pkgs, hsPkgs, pkgconfPkgs, ... }:
             (hsPkgs."network" or (buildDepError "network"))
             (hsPkgs."optparse-applicative" or (buildDepError "optparse-applicative"))
             (hsPkgs."socket-activation" or (buildDepError "socket-activation"))
-            (hsPkgs."utf8-string" or (buildDepError "utf8-string"))
             (hsPkgs."obiwan" or (buildDepError "obiwan"))
             ];
           buildable = true;

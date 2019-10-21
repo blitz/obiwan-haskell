@@ -4,10 +4,10 @@
 [![stability-experimental](https://img.shields.io/badge/stability-experimental-orange.svg)](https://github.com/emersion/stability-badges#experimental)
 ![GitHub](https://img.shields.io/github/license/blitz/obiwan.svg)
 
-Obiwan is a TFTP server that builds the content it serves on the fly. At the
-moment, it is a very barebones implementation of
-[https://tools.ietf.org/html/rfc1350](TFTP (rev2)) without any bells and
-whistles. Content is served from memory.
+Obiwan is a read-only TFTP server written in Haskell. At the moment,
+it is a very barebones implementation of
+[https://tools.ietf.org/html/rfc1350](TFTP (rev2)) without any bells
+and whistles. Content is served from memory.
 
 **Limitations:** This code is super experimental at the moment and only handles GET requests.
 

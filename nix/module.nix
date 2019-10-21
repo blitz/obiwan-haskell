@@ -75,7 +75,7 @@ in {
         User = cfg.user;
         ExecStart = "${cfg.package}/bin/obiwan --socket-activation";
 
-        WorkDirectory = cfg.rootDir;
+        WorkingDirectory = cfg.rootDir;
         
         # TODO Would be nice to eventually support this.
         #DynamicUser = true;

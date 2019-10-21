@@ -1,0 +1,5 @@
+There is absolutely no security which files are served. We need to
+support chroot somehow. At the moment the path passed from the client
+is just used to open files.
+
+Also file opening has no error handling.

@@ -2,13 +2,11 @@
 
 module Main (main) where
 
-import           Data.ByteString.UTF8 as BSU
 import           Data.Semigroup ((<>))
 import           Network.Socket.Activation as NSA
 import           Options.Applicative
 import qualified Network.Socket as S
 
-import           TftpContent (fromKeyValuePairs)
 import           TftpServer
 
 -- Command-line parser
@@ -35,7 +33,7 @@ arguments = standaloneArgs <|> socketActivationArgs
 createBoundUdpSocket :: String -> String -> IO S.Socket
 createBoundUdpSocket address service = do
   putStrLn $ "Listening on " ++ address ++ ":" ++ service
-  sock <- S.socket S.AF_UNSPEC S.Datagram 0
+  sock <- S.socket S.AF_INET S.Datagram 0
   addrInfo:_ <-
     S.getAddrInfo
       (Just (S.defaultHints {S.addrSocketType = S.Datagram}))
@@ -55,7 +53,6 @@ main :: IO ()
 main = do
   putStrLn "Obiwan TFTP Server ready."
   S.withSocketsDo $
-    execParser opts >>= argsToSocket >>= serveTftp kvContent
+    execParser opts >>= argsToSocket >>= serveTftp
   where
     opts = info (arguments <**> helper) (fullDesc <> progDesc "Obiwan Scriptable TFTP Server")
-    kvContent = fromKeyValuePairs [("foo", BSU.fromString "bar")]

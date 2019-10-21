@@ -2,17 +2,17 @@
 
 module TftpServer (serveTftp) where
 
-import           Control.Concurrent        (forkIO)
-import           Control.Monad             (void)
-import           Control.Monad.IO.Class    (MonadIO, liftIO)
-import           Control.Monad.Reader      (ReaderT, ask, runReaderT)
-import           Data.Functor              ((<&>))
-import qualified Network.Socket            as S
+import           Control.Concurrent (forkIO)
+import           Control.Monad (void)
+import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Control.Monad.Reader (ReaderT, ask, runReaderT)
+import qualified Data.ByteString as B
+import           Data.Functor ((<&>))
+import qualified Network.Socket as S
 import qualified Network.Socket.ByteString as SB
-import           System.Timeout            (timeout)
+import           System.Timeout (timeout)
 
 import           TftpConnection
-import           TftpContent               (Content)
 
 -- Constants
 
@@ -38,6 +38,10 @@ instance MonadIO m => MonadTftpConnection (ReaderT Client m) where
     client <- ask
     liftIO $ putStrLn $ show (clientAddress client) ++ " | " ++ msg
 
+  readFileContent fp = do
+    content <- liftIO $ (B.readFile fp)
+    return $ Just content
+
 -- Network helpers
 
 createConnectedUdpSocket :: S.SockAddr -> IO Client
@@ -57,15 +61,15 @@ loopForever :: a -> (a -> IO a) -> IO ()
 loopForever s f = void (loopForever_ s)
   where loopForever_ s_ = f s_ >>= (`loopForever` f)
 
-serveTftp :: Content -> S.Socket -> IO ()
-serveTftp content serverSocket = do
+serveTftp :: S.Socket -> IO ()
+serveTftp serverSocket = do
   loopForever () $ \_ -> do
     (initialMsg, sockaddr) <- SB.recvFrom serverSocket tftpMaxPacketSize
     void $ forkIO $ do
       client <- createConnectedUdpSocket sockaddr
       let clientSession = do
             logMsg "creating session"
-            handleClient content initialMsg
+            handleClient initialMsg
             logMsg "closing session"
       runReaderT clientSession client
       S.close (clientSocket client)

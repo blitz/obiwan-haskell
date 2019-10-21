@@ -6,11 +6,10 @@ module TftpConnection
   ) where
 
 import           Control.Monad.State.Lazy (State, runState, state)
-import qualified Data.ByteString          as B
-import           Data.Functor             ((<&>))
-import           Data.Maybe               (catMaybes)
+import qualified Data.ByteString as B
+import           Data.Functor ((<&>))
+import           Data.Maybe (catMaybes)
 
-import           TftpContent              (Content, getContent)
 import           TftpProto
 
 -- Configuration
@@ -31,6 +30,8 @@ class Monad m => MonadTftpConnection m where
   recvData :: TimeoutMs -> m (Maybe B.ByteString)
   sendData :: B.ByteString -> m ()
   logMsg :: String -> m ()
+  -- TODO This needs to be a lazy ByteString.
+  readFileContent :: FilePath -> m (Maybe B.ByteString)
 
 -- TFTP State Handling
 
@@ -61,41 +62,60 @@ acknowledgeOptions conn options = runState (mapM ackOption options <&> catMaybes
     ackOption :: RequestOption -> State Connection (Maybe RequestOption)
     ackOption o = state (acknowledgeOption o)
 
-continueConnection :: Content -> Connection -> Request -> Maybe (Request, Connection)
+continueConnection :: MonadTftpConnection m => Connection -> Request -> m (Request, Connection)
 
 -- The client requests to open a file for reading
-continueConnection content _ (RRQ filename Binary options) =
-  case getContent content filename of
+continueConnection _ (RRQ filename Binary options) = do
+  fileContent <- readFileContent filename
+  case fileContent of
     Just buf -> if null options then
-                  continueConnection content newState (ACK 0)
+                  continueConnection newState (ACK 0)
                 else
-                  Just (acknowledgeOptions newState options)
+                  return $ acknowledgeOptions newState options
       where newState = Reading buf tftpBlockSize
-    Nothing  -> Just (ERR FileNotFound "No such file", Pristine)
+    Nothing  -> return $ (ERR FileNotFound "No such file", Pristine)
 
 -- The client acknowledged a data packet. Send the next.
-continueConnection _ con@(Reading buf blksize) (ACK n) = Just (getDataBlock (fromIntegral n + 1) blksize buf, con)
+continueConnection con@(Reading buf blksize) (ACK n) = return (getDataBlock (fromIntegral n + 1) blksize buf, con)
 
--- No clue what happened. Close the connection.
-continueConnection _ _ _ = Nothing
+-- Invalid request
+continueConnection con _ = do
+  logMsg (show con)
+  return $ (ERR IllegalOperation "Unknown request", Pristine)
 
-handleClient :: MonadTftpConnection m => Content -> B.ByteString -> m ()
-handleClient content = handleReceivedData Pristine
+handleOne :: MonadTftpConnection m => Connection -> B.ByteString -> m Connection
+handleOne state msg = do
+  case decodePacket msg of
+    Nothing -> closeWithDecodingError
+    Just packet -> do
+      logMsg (show packet)
+      (response, newState) <- continueConnection state packet
+      sendReponse response
+      return $ newState
+  
   where
-    handleReceivedData conn msg = maybe closeWithDecodingError (handleDecoded conn) $ decodePacket msg
-    handleDecoded conn decoded =
-      maybe closeWithReponseError (uncurry sendReponse) $ continueConnection content conn decoded
-    sendReponse resp conn = do
+    sendReponse resp = do
       case resp of
         (ERR _ errMsg) -> logMsg $ "error: " ++ errMsg
         _              -> return ()
       sendData $ encodePacket resp
-      nextMsg <- recvData tftpTimeoutMs
-      maybe closeWithTimeout (handleReceivedData conn) nextMsg
 
     closeWithDecodingError = closeWithError IllegalOperation "Failed to parse packet"
-    closeWithReponseError = closeWithError IllegalOperation "Unknown request"
     closeWithError errCode errMsg = do
       logMsg  $ "error: " ++ errMsg
       sendData $ encodePacket $ ERR errCode errMsg
-    closeWithTimeout = logMsg "timeout"
+      return Pristine
+
+messageLoop :: MonadTftpConnection m => Connection -> B.ByteString -> m ()
+messageLoop state msg = do
+  newState <- handleOne state msg
+  maybeNewMsg <- recvData tftpTimeoutMs
+
+  case maybeNewMsg of
+    Just newMsg -> messageLoop newState newMsg
+    Nothing -> do
+      logMsg "timeout"
+      return ()
+
+handleClient :: MonadTftpConnection m => B.ByteString -> m ()
+handleClient = messageLoop Pristine
