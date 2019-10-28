@@ -1,6 +1,6 @@
 builtins.fetchTarball {
-  name = "nixos-unstable-2019-10-20";
-  url = "https://github.com/nixos/nixpkgs/archive/550085dd4654babb5009fcf92d85e4fb5c6b376e.tar.gz";
+  name = "nixos-unstable-2019-10-29";
+  url = "https://github.com/nixos/nixpkgs/archive/064ccfd19b68e17f8d04498d4bce6959b9554660.tar.gz";
   # Hash obtained using `nix-prefetch-url --unpack <url>`
-  sha256 = "0cv1nz20qby0v5fnnxi2r9c2rrgxdady15n9b7ldj08xnmy3vb1g";
+  sha256 = "0pzpw25p9482diacy9mwy8g54qfpxr4w7kf2h7dfh6jry3xahyh2";
 }
