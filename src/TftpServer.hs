@@ -2,15 +2,15 @@
 
 module TftpServer (serveTftp) where
 
-import           Control.Concurrent (forkIO)
-import           Control.Monad (void)
-import           Control.Monad.IO.Class (MonadIO, liftIO)
-import           Control.Monad.Reader (ReaderT, ask, runReaderT)
-import qualified Data.ByteString as B
-import           Data.Functor ((<&>))
-import qualified Network.Socket as S
+import           Control.Concurrent        (forkIO)
+import           Control.Monad             (void)
+import           Control.Monad.IO.Class    (MonadIO, liftIO)
+import           Control.Monad.Reader      (ReaderT, ask, runReaderT)
+import qualified Data.ByteString           as B
+import           Data.Functor              ((<&>))
+import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
-import           System.Timeout (timeout)
+import           System.Timeout            (timeout)
 
 import           TftpConnection
 
@@ -51,9 +51,9 @@ createConnectedUdpSocket sockaddr = do
   S.connect sock sockaddr
   return $ Client sockaddr sock
   where addressFamily = case sockaddr of
-                          S.SockAddrInet _ _ -> S.AF_INET
+                          S.SockAddrInet _ _      -> S.AF_INET
                           S.SockAddrInet6 _ _ _ _ -> S.AF_INET6
-                          _ -> S.AF_UNSPEC
+                          _                       -> S.AF_UNSPEC
 
 -- Main server loop
 
