@@ -19,7 +19,6 @@ nixosTest {
     };
   };
 
-  # TODO
   testScript = ''
     $server->start();
     $server->waitForUnit("obiwan.socket");
