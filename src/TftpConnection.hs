@@ -5,11 +5,12 @@ module TftpConnection
   , MonadTftpConnection(..)
   ) where
 
+import           Conduit
 import           Control.Monad.State.Lazy (State, runState, state)
-import qualified Data.ByteString as B
-import           Data.Functor ((<&>))
-import           Data.Maybe (catMaybes)
-
+import qualified Data.ByteString          as B
+import           Data.Conduit.List        (mapMaybeM)
+import           Data.Functor             ((<&>))
+import           Data.Maybe               (catMaybes, fromJust, isJust)
 import           TftpProto
 
 -- Configuration
@@ -83,39 +84,41 @@ continueConnection con _ = do
   logMsg (show con)
   return $ (ERR IllegalOperation "Unknown request", Pristine)
 
-handleOne :: MonadTftpConnection m => Connection -> B.ByteString -> m Connection
-handleOne state msg = do
-  case decodePacket msg of
-    Nothing -> closeWithDecodingError
-    Just packet -> do
-      logMsg (show packet)
-      (response, newState) <- continueConnection state packet
-      sendReponse response
-      return $ newState
-  
-  where
-    sendReponse resp = do
-      case resp of
-        (ERR _ errMsg) -> logMsg $ "error: " ++ errMsg
-        _              -> return ()
-      sendData $ encodePacket resp
+-- Conduit implementation
 
-    closeWithDecodingError = closeWithError IllegalOperation "Failed to parse packet"
-    closeWithError errCode errMsg = do
-      logMsg  $ "error: " ++ errMsg
-      sendData $ encodePacket $ ERR errCode errMsg
-      return Pristine
+sourceUdpPackets :: MonadTftpConnection m => B.ByteString -> ConduitT i B.ByteString m ()
+sourceUdpPackets initialMsg = do
+  yield initialMsg
+  repeatWhileMC (recvData tftpTimeoutMs) isJust .| mapC fromJust
 
-messageLoop :: MonadTftpConnection m => Connection -> B.ByteString -> m ()
-messageLoop state msg = do
-  newState <- handleOne state msg
-  maybeNewMsg <- recvData tftpTimeoutMs
+sinkUdpPackets :: MonadTftpConnection m => ConduitT B.ByteString Void m ()
+sinkUdpPackets = mapM_C sendData
 
-  case maybeNewMsg of
-    Just newMsg -> messageLoop newState newMsg
-    Nothing -> do
-      logMsg "timeout"
-      return ()
+ignoreInvalidPackets :: Monad m => ConduitT (Maybe a) a m ()
+ignoreInvalidPackets = mapMaybeM pure
+
+decodePackets :: Monad m => ConduitT B.ByteString Request m ()
+decodePackets = mapC decodePacket .| ignoreInvalidPackets
+
+encodePackets :: Monad m => ConduitT Request B.ByteString m ()
+encodePackets = mapC encodePacket
+
+handlePackets :: MonadTftpConnection m => Connection -> ConduitT Request Request m ()
+handlePackets state = do
+  maybeInput <- await
+  case maybeInput of
+    Just input -> do
+      (output, newState) <- lift $ continueConnection state input
+      yield output
+      handlePackets newState
+    Nothing    -> return ()
+
+-- Putting everything together
 
 handleClient :: MonadTftpConnection m => B.ByteString -> m ()
-handleClient = messageLoop Pristine
+handleClient initialMsg = runConduit
+   $ sourceUdpPackets initialMsg
+  .| decodePackets
+  .| handlePackets Pristine
+  .| encodePackets
+  .| sinkUdpPackets

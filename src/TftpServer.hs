@@ -11,7 +11,6 @@ import           Data.Functor              ((<&>))
 import qualified Network.Socket            as S
 import qualified Network.Socket.ByteString as SB
 import           System.Timeout            (timeout)
-
 import           TftpConnection
 
 -- Constants

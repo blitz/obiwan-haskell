@@ -61,6 +61,7 @@ in { system, compiler, flags, pkgs, hsPkgs, pkgconfPkgs, ... }:
           (hsPkgs."binary" or (buildDepError "binary"))
           (hsPkgs."bytestring" or (buildDepError "bytestring"))
           (hsPkgs."case-insensitive" or (buildDepError "case-insensitive"))
+          (hsPkgs."conduit" or (buildDepError "conduit"))
           (hsPkgs."network" or (buildDepError "network"))
           (hsPkgs."filepattern" or (buildDepError "filepattern"))
           (hsPkgs."mtl" or (buildDepError "mtl"))
