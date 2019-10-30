@@ -6,11 +6,11 @@ module TftpConnection
   ) where
 
 import           Conduit
-import           Control.Monad.State.Lazy (State, runState, state)
-import qualified Data.ByteString          as B
-import           Data.Conduit.List        (mapMaybeM)
-import           Data.Functor             ((<&>))
-import           Data.Maybe               (catMaybes, fromJust, isJust)
+import           Control.Monad.State (State, get, put, runState, state)
+import qualified Data.ByteString     as B
+import           Data.Conduit.List   (mapMaybeM)
+import           Data.Functor        ((<&>))
+import           Data.Maybe          (catMaybes, fromJust, isJust)
 import           TftpProto
 
 -- Configuration
@@ -103,15 +103,12 @@ decodePackets = mapC decodePacket .| ignoreInvalidPackets
 encodePackets :: Monad m => ConduitT Request B.ByteString m ()
 encodePackets = mapC encodePacket
 
-handlePackets :: MonadTftpConnection m => Connection -> ConduitT Request Request m ()
-handlePackets state = do
-  maybeInput <- await
-  case maybeInput of
-    Just input -> do
-      (output, newState) <- lift $ continueConnection state input
-      yield output
-      handlePackets newState
-    Nothing    -> return ()
+handlePackets :: MonadTftpConnection m => ConduitT Request Request m ()
+handlePackets = evalStateC Pristine $ awaitForever $ \input -> do
+  state <- get
+  (output, newState) <- lift $ lift $ continueConnection state input
+  put newState
+  yield output
 
 -- Putting everything together
 
@@ -119,6 +116,6 @@ handleClient :: MonadTftpConnection m => B.ByteString -> m ()
 handleClient initialMsg = runConduit
    $ sourceUdpPackets initialMsg
   .| decodePackets
-  .| handlePackets Pristine
+  .| handlePackets
   .| encodePackets
   .| sinkUdpPackets
