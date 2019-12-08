@@ -2,10 +2,10 @@
 
 module Main (main) where
 
-import           Data.Semigroup ((<>))
+import           Data.Semigroup            ((<>))
+import qualified Network.Socket            as S
 import           Network.Socket.Activation as NSA
 import           Options.Applicative
-import qualified Network.Socket as S
 
 import           TftpServer
 
@@ -42,11 +42,18 @@ createBoundUdpSocket address service = do
   S.bind sock (S.addrAddress addrInfo)
   return sock
 
+-- Sockets passed from systemd may be blocking.
+-- XXX Use newer network library that has withFdSocket to avoid GC problems.
+unblockSocket :: S.Socket -> IO ()
+unblockSocket socket = S.setNonBlockIfNeeded $ S.fdSocket socket
+
 argsToSocket :: Arguments -> IO (S.Socket)
 argsToSocket (Standalone address service) = createBoundUdpSocket address service
 argsToSocket (SocketActivation) =
   NSA.getActivatedSockets >>= \case
-  Just [fd] -> return fd
+  Just [fd] -> do
+    unblockSocket fd
+    return fd
   otherwise -> fail "Received invalid number of file descriptors"
 
 main :: IO ()
@@ -55,4 +62,4 @@ main = do
   S.withSocketsDo $
     execParser opts >>= argsToSocket >>= serveTftp
   where
-    opts = info (arguments <**> helper) (fullDesc <> progDesc "Obiwan Scriptable TFTP Server")
+    opts = info (arguments <**> helper) (fullDesc <> progDesc "Obiwan TFTP Server")

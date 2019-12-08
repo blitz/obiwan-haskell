@@ -45,7 +45,6 @@ instance MonadIO m => MonadTftpConnection (ReaderT Client m) where
 
 createConnectedUdpSocket :: S.SockAddr -> IO Client
 createConnectedUdpSocket sockaddr = do
-  putStrLn (show sockaddr)
   sock <- S.socket addressFamily S.Datagram 0
   S.connect sock sockaddr
   return $ Client sockaddr sock
