@@ -4,5 +4,5 @@ let
   niv = import sources.niv {};
 in
 pkgs.mkShell {
-  nativeBuildInputs = [ niv.niv pkgs.stack pkgs.haskell-nix.nix-tools ];
+  nativeBuildInputs = [ niv.niv pkgs.stack pkgs.haskell-nix.nix-tools pkgs.stylish-haskell ];
 }
