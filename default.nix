@@ -1,4 +1,6 @@
-{ nixpkgs ? import ./nix/nixpkgs.nix, pkgs ? import nixpkgs { } }:
+{ sources ? import ./nix/sources.nix, nixpkgs ? sources.nixpkgs
+, pkgs ? import nixpkgs (import sources.haskell) }:
+
 let
   obiwanComponents =
     (import ./nix/build.nix { inherit pkgs; }).obiwan.components;

@@ -4,5 +4,5 @@
 
 set -eux
 
-nix-prefetch-git --quiet https://github.com/input-output-hk/haskell.nix > nix/haskell-nix-src.json
+niv update
 stack-to-nix --output . --stack-yaml stack.yaml
