@@ -11,7 +11,8 @@ nixosTest {
 
         rootDir = runCommand "tftproot" {} ''
           mkdir "$out"
-          echo "hello world" > $out/hello.world
+          echo "hello binary" > $out/binary.hello
+          echo "hello ascii" > $out/ascii.hello
         '';
       };
 
@@ -23,8 +24,10 @@ nixosTest {
     $server->start();
     $server->waitForUnit("obiwan.socket");
     
-    $server->succeed("tftp -m binary localhost -c get hello.world");
-    $server->succeed("[ -f hello.world ]");
-    $server->succeed("[ \"\$(cat hello.world)\" = 'hello world' ]");
+    $server->succeed("tftp -m binary localhost -c get binary.hello");
+    $server->succeed("[ -f binary.hello ] && [ \"\$(cat binary.hello)\" = 'hello binary' ]");
+
+    $server->succeed("tftp -m ascii localhost -c get ascii.hello");
+    $server->succeed("[ -f ascii.hello ] && [ \"\$(cat ascii.hello)\" = 'hello ascii' ]");
   '';
 }

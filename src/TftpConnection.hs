@@ -66,7 +66,8 @@ acknowledgeOptions conn options = runState (mapM ackOption options <&> catMaybes
 continueConnection :: MonadTftpConnection m => Connection -> Request -> m (Request, Connection)
 
 -- The client requests to open a file for reading
-continueConnection _ (RRQ filename Binary options) = do
+continueConnection _ packet@(RRQ filename _ options) = do
+  logMsg (show packet)
   fileContent <- readFileContent filename
   case fileContent of
     Just buf -> if null options then
