@@ -1,6 +1,5 @@
 # Obiwan TFTP Server
 
-[![Build Status](https://travis-ci.org/blitz/obiwan.svg?branch=master)](https://travis-ci.org/blitz/obiwan)
 [![stability-experimental](https://img.shields.io/badge/stability-experimental-orange.svg)](https://github.com/emersion/stability-badges#experimental)
 ![GitHub](https://img.shields.io/github/license/blitz/obiwan.svg)
 
