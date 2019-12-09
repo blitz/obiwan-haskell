@@ -16,7 +16,7 @@ nixosTest {
         '';
       };
 
-      environment.systemPackages = [ pkgs.tftp-hpa ];
+      environment.systemPackages = [ pkgs.tftp-hpa pkgs.atftp ];
     };
   };
 
@@ -29,5 +29,8 @@ nixosTest {
 
     $server->succeed("tftp -m ascii localhost -c get ascii.hello");
     $server->succeed("[ -f ascii.hello ] && [ \"\$(cat ascii.hello)\" = 'hello ascii' ]");
+
+    $server->succeed("atftp --option \"blksize 1024\" -g -l atftp.hello -r binary.hello localhost");
+    $server->succeed("[ -f atftp.hello ] && [ \"\$(cat atftp.hello)\" = 'hello binary' ]");
   '';
 }
